@@ -1,0 +1,69 @@
+---
+title: "Building Cognitive Pipelines with LangChain and FAISS"
+date: "2025-12-10"
+description: "How to design AI systems that think, learn, and deliver real value using RAG, embeddings, and vector memory."
+tags: ["AI", "LangChain", "Python", "RAG", "Backend"]
+published: true
+---
+
+# Building Cognitive Pipelines with LangChain and FAISS
+
+Most AI tutorials stop at "hello world" with ChatGPT. But production-grade AI systems need solid architecture, persistent memory, and well-designed pipelines.
+
+## The Real Problem
+
+A standalone LLM has goldfish memory — it forgets everything after the context window. For truly cognitive systems, we need:
+
+- **Persistent vector memory** (FAISS, ChromaDB)
+- **RAG** (Retrieval-Augmented Generation) for relevant context
+- **Async pipelines** to avoid blocking the server
+
+## The Architecture
+
+```python
+from langchain.embeddings import OpenAIEmbeddings
+from langchain.vectorstores import FAISS
+from langchain.chains import RetrievalQA
+from langchain.llms import OpenAI
+
+# 1. Initialize embeddings
+embeddings = OpenAIEmbeddings()
+
+# 2. Create/load vector store
+vectorstore = FAISS.from_documents(docs, embeddings)
+
+# 3. Configure retriever with similarity threshold
+retriever = vectorstore.as_retriever(
+    search_type="similarity_score_threshold",
+    search_kwargs={"score_threshold": 0.7, "k": 5}
+)
+
+# 4. Full pipeline
+chain = RetrievalQA.from_chain_type(
+    llm=OpenAI(temperature=0),
+    chain_type="stuff",
+    retriever=retriever,
+    return_source_documents=True
+)
+```
+
+## Best Practices
+
+**1. Smart chunking** — Don't split documents arbitrarily. Use semantic separators.
+
+**2. Embedding cache** — Embeddings are expensive. Persist them to disk and invalidate only when content changes.
+
+**3. Async by default** — In FastAPI, always use `async def` for AI endpoints. LLMs are I/O bound.
+
+```python
+@app.post("/query")
+async def query_endpoint(request: QueryRequest):
+    result = await asyncio.to_thread(chain.invoke, {"query": request.query})
+    return {"answer": result["result"], "sources": result["source_documents"]}
+```
+
+## Conclusion
+
+Cognitive pipelines are not magic — they are architecture. With FAISS for vector memory and LangChain orchestrating the flow, you build systems that genuinely learn and retain context.
+
+Full source code is on my [GitHub](https://github.com/codennomad).

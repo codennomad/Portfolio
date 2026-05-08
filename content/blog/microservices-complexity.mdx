@@ -1,0 +1,207 @@
+---
+title: "The Microservices Tax: What Nobody Tells You"
+date: "2026-05-05"
+description: "Microservices solved scaling problems that most teams don't have, and created distributed systems problems that most teams aren't equipped to handle. An honest engineering analysis of the tradeoffs."
+tags: ["Architecture", "Microservices", "Distributed Systems", "Backend", "Engineering"]
+published: true
+---
+
+> "Microservices did not solve your scaling problem. They traded it for a distributed systems problem."
+
+The canonical microservices pitch: independently deployable services, technology heterogeneity, team autonomy, infinite horizontal scalability. The pitch is not wrong. For Netflix, Amazon, and Google — organizations with 100+ engineering teams, millions of requests per second, and independently evolving business domains — microservices are the correct architecture.
+
+For a team of five, they are usually an expensive mistake made in the name of future-proofing.
+
+## The Real Problem
+
+The "microservices vs monolith" debate is almost always framed wrong. It is not about file organization, it is not about deployment philosophy, and it is not about technology. It is about the cost of distributed computing versus the cost of tight coupling.
+
+Both costs are real. The question is which cost your team and system can bear.
+
+What gets advertised:
+- Independent deployability
+- Service isolation: one service fails, others continue
+- Team autonomy: team A can change service A without coordinating with team B
+- Language/framework freedom
+
+What doesn't get advertised:
+- Every function call becomes a network call with latency, serialization, and failure modes
+- Distributed tracing is not optional — without it, debugging is archaeology
+- Data consistency across services requires distributed transactions or eventual consistency
+- Service discovery, load balancing, health checking, and circuit breaking must be built and maintained
+- Every inter-service API is a contract that must be versioned and managed forever
+
+## Deep Engineering
+
+### The Network Tax
+
+A local function call: ~1 nanosecond. A network call to an internal microservice: ~1 millisecond. That's a **1,000,000x difference** in latency.
+
+In a monolith:
+```
+HTTP Request → Router → Controller → Service → Repository → DB
+             ~0ms      ~0ms         ~0ms        ~5ms
+                                                         = ~5ms
+```
+
+In microservices:
+```
+HTTP Request → API Gateway → User Service → Order Service → Inventory Service → DB
+             ~2ms          ~5ms            ~5ms             ~5ms               ~5ms
+                         (network)        (network)        (network)
+                                                                              = ~22ms
+```
+
+The same operation is 4x slower — before any services are under load. Under load, queuing at each service boundary compounds further.
+
+For a CRUD API with no genuine scalability constraints, this is pure tax.
+
+### Distributed Data Consistency
+
+A monolith with a single database gets ACID transactions for free:
+
+```python
+# Monolith: atomic across tables
+async with db.transaction():
+    await db.create_order(order)
+    await db.deduct_inventory(items)
+    await db.charge_customer(payment)
+    # either all succeed or all rollback — guaranteed
+```
+
+Microservices with separate databases lose this:
+
+```python
+# Microservices: no atomic guarantee across services
+order = await order_service.create(order)           # succeeds ✓
+inventory = await inventory_service.deduct(items)   # succeeds ✓
+payment = await payment_service.charge(payment)     # fails! ✗
+
+# Now what?
+# order exists, inventory is deducted, payment failed
+# Need to: compensate order, compensate inventory, retry payment?
+# This is a distributed saga, and implementing it correctly is non-trivial
+```
+
+The Saga pattern solves this with compensating transactions, but it requires explicit rollback logic for every failure scenario. This is code you now must write, test, and maintain that would not exist in a monolith.
+
+### The Observability Cliff
+
+In a monolith, a stack trace tells you everything:
+
+```
+AttributeError: 'NoneType' object has no attribute 'id'
+  File "app/services/order_service.py", line 47, in create_order
+    user = get_user(order.user_id)
+```
+
+In microservices with a distributed trace:
+
+```
+Request trace ID: a1b2c3d4e5f6
+├── API Gateway:        200ms
+│   └── User Service:   50ms ✓
+├── Order Service:      timeout after 500ms ✗
+│   ├── DB query:       10ms ✓
+│   └── Inventory call: timeout after 490ms ✗
+│       └── [trace dropped - Inventory Service not reporting to Jaeger]
+└── Payment Service:    not reached
+```
+
+The actual error is somewhere in Inventory Service. But it's not reporting traces. You need to: check its logs, correlate with the trace ID, check if it had a DB connection issue, check if its upstream dependency had a DNS resolution failure.
+
+This investigation takes 40 minutes. In a monolith, it takes 2 minutes.
+
+Distributed tracing, centralized logging, and metrics dashboards are mandatory — not optional enhancements. They add 2–4 weeks of platform work before your microservices are observable enough for production.
+
+### Service Versioning: The Forever Problem
+
+A monolith refactors internally. A microservice must maintain backwards-compatible APIs forever (or coordinate simultaneous deployments across multiple teams):
+
+```
+# Internal monolith function — refactor freely
+def get_user_profile(user_id: str) -> UserProfile:
+    ...
+
+# Microservice endpoint — this is now a contract
+GET /users/{user_id}/profile
+→ { "id": "...", "name": "...", "email": "..." }
+
+# Six months later you want to change the response shape
+# You cannot. Consumers exist. They depend on this shape.
+# You must:
+# - Add /v2/users/{user_id}/profile
+# - Keep /v1/users/{user_id}/profile running indefinitely
+# - Track which consumers use which version
+# - Coordinate deprecation with every team
+```
+
+Every service becomes a public API surface the moment another service depends on it.
+
+### When Microservices Are Correct
+
+The distinction is **bounded context + team boundary + genuine independent scaling need**:
+
+```
+Monolith is correct when:
+├── Team is < 10 engineers
+├── Services would share the same database
+├── Business domains are not clearly separated
+├── Deployment frequency is low
+└── Independent scaling is not a current, measured need
+
+Microservices are correct when:
+├── Teams work on genuinely separate domains with clear ownership
+├── Services have wildly different scaling requirements
+│   (e.g., user auth: 10k req/s, report generation: 1 req/min)
+├── Different services need different runtime characteristics
+│   (ML inference needs GPU; CRUD API needs CPU+DB)
+├── Regulatory requirements mandate data isolation
+└── You have the platform team to support it
+```
+
+### The Modular Monolith
+
+The middle path that is almost always the right starting point:
+
+```
+┌─────────────────────────────────────────────────────┐
+│                   Monolith Process                   │
+│                                                     │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────┐  │
+│  │  User Module │  │ Order Module │  │Inventory │  │
+│  │              │  │              │  │  Module  │  │
+│  │  Internal    │  │  Internal    │  │          │  │
+│  │  interfaces  │  │  interfaces  │  │ Internal │  │
+│  │  enforced    │  │  enforced    │  │ interfaces│ │
+│  └──────┬───────┘  └──────┬───────┘  └────┬─────┘  │
+│         │                 │               │         │
+│         └─────────────────┴───────────────┘         │
+│                    Shared DB                         │
+└─────────────────────────────────────────────────────┘
+```
+
+Modules communicate through defined interfaces. Each module has its own directory, its own tests, its own internal domain model. Cross-module calls go through the interface layer, not by importing internal functions.
+
+This gives you:
+- Clear domain boundaries (preparatory to extraction later)
+- Team autonomy via ownership conventions
+- No network overhead
+- ACID transactions
+- Simple debugging
+
+When a specific module genuinely needs independent scaling (measured, not hypothetical), extract it. You now extract a service with clear boundaries that have already been established and tested.
+
+## Engineering Lessons
+
+**1. Conway's Law is real.** "Organizations which design systems are constrained to produce designs which are copies of the communication structures of those organizations." Your architecture should match your team structure. A five-person team building 12 microservices produces a distributed system that mirrors the communication overhead of 12 teams — with five people maintaining it.
+
+**2. Premature extraction is premature optimization.** Build the monolith. Measure where it breaks. Extract the services that need extraction based on actual evidence. This order of operations matters enormously.
+
+**3. "What if we need to scale?" is not a design requirement.** It's a hypothesis. Build for the load you have, with the architecture that your current load can justify. Scaling requirements that never materialize cost real engineering time and ongoing operational overhead.
+
+**4. Service boundaries must align with data ownership.** If two services share a database, they are not microservices — they are a distributed monolith with all the costs of both architectures and the benefits of neither.
+
+**5. Operational excellence is not free.** Deploying 12 services requires CI/CD for 12 services, health checks for 12 services, alert rules for 12 services, runbooks for 12 services, on-call rotations covering 12 services. This is a massive operational surface area. Size it relative to your team's capacity to maintain it.
+
+Microservices are the right answer to the right question. The most common mistake in the industry is asking that question before you have the evidence to justify the answer.

@@ -1,0 +1,300 @@
+---
+title: "Cognitive Systems Engineering: When Software Begins to Reason"
+date: "2026-05-08"
+description: "Software that executes instructions is a program. Software that observes context, retrieves relevant memory, reasons over it, and acts — that is a cognitive system. The architecture, the patterns, and the engineering discipline of building AI systems that actually work in production."
+tags: ["AI", "LLMs", "Architecture", "Cognitive Systems", "Agents", "Production"]
+published: true
+---
+
+> "Software is no longer just executed. It reasons, remembers, and adapts."
+
+For fifty years, software engineering has meant the same thing: transform input to output, deterministically, according to explicit rules written by a human. The rules are precise. The behavior is predictable. Testing is straightforward.
+
+Large language models break this model completely.
+
+An LLM-based system receives a natural language input, retrieves relevant context from a memory store it has never seen, reasons over it using probabilistic inference, and produces output that was never explicitly programmed. Testing is not straightforward. Behavior is not deterministic. And the engineering discipline to build these systems reliably is, as an industry, still being written.
+
+This is what I have learned building cognitive systems in production.
+
+## The Real Problem
+
+Most "AI-powered features" are not cognitive systems. They are language models called via API, with the response displayed to the user. This is an LLM integration. It is not an architecture.
+
+The distinction matters because the failure modes are completely different:
+
+**LLM integration failure modes:**
+- Model hallucination
+- Prompt injection
+- Context window exceeded
+- Rate limiting
+
+**Cognitive system failure modes:**
+- Memory contamination (wrong context retrieved)
+- Reasoning cascade failure (one wrong inference compounds)
+- Tool execution side effects (the agent did something irreversible)
+- Observation-action loop breakdown (agent loops without making progress)
+- Semantic drift in memory (embeddings stored under old model, retrieved under new model)
+
+Building cognitive systems requires thinking about all of these simultaneously.
+
+## Deep Engineering
+
+### The Architecture of a Cognitive Agent
+
+Every cognitive system has the same fundamental architecture:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Cognitive Agent                       │
+│                                                         │
+│  Input/Observation                                      │
+│       │                                                 │
+│       ▼                                                 │
+│  ┌──────────┐    retrieval    ┌───────────────────┐     │
+│  │  Router  │◄───────────────►│  Memory System    │     │
+│  │  Layer   │                 │  - Episodic (past │     │
+│  └────┬─────┘                 │    interactions)  │     │
+│       │                       │  - Semantic (docs,│     │
+│       ▼                       │    knowledge)     │     │
+│  ┌──────────┐                 │  - Procedural     │     │
+│  │ Reasoning│                 │    (how-to steps) │     │
+│  │  (LLM)   │                 └───────────────────┘     │
+│  └────┬─────┘                                           │
+│       │                       ┌───────────────────┐     │
+│       ▼                       │   Tool Registry   │     │
+│  ┌──────────┐  tool_call      │  - search_web     │     │
+│  │  Action  │◄───────────────►│  - run_query      │     │
+│  │  Layer   │                 │  - write_file     │     │
+│  └────┬─────┘                 │  - call_api       │     │
+│       │                       └───────────────────┘     │
+│       ▼                                                 │
+│  Output / New Observation (→ loops back)                │
+└─────────────────────────────────────────────────────────┘
+```
+
+The loop is the architecture. The agent observes, retrieves memory, reasons, acts, and observes the result of its action. This runs until a termination condition is met.
+
+### Memory Systems
+
+Memory is where cognitive systems break most often. There are three functionally distinct types:
+
+**Episodic memory:** What happened in this conversation or previous sessions. Stored as conversation turns, retrieved by recency and relevance.
+
+**Semantic memory:** General knowledge — documentation, codebase context, product information. Stored as embeddings, retrieved by semantic similarity.
+
+**Procedural memory:** How to do specific tasks — step-by-step instructions, tool usage patterns. Retrieved when a task type is recognized.
+
+```python
+from dataclasses import dataclass
+from typing import Literal
+
+@dataclass
+class MemoryChunk:
+    content: str
+    memory_type: Literal["episodic", "semantic", "procedural"]
+    embedding: list[float]
+    metadata: dict
+    created_at: datetime
+    # critical: which model version created this embedding
+    embedding_model: str
+
+class HybridMemorySystem:
+    def __init__(self, vector_store, relational_db):
+        self.vectors = vector_store
+        self.db = relational_db
+
+    async def retrieve(
+        self,
+        query: str,
+        memory_types: list[str],
+        top_k: int = 5,
+        agent_id: str | None = None,
+    ) -> list[MemoryChunk]:
+        query_embedding = await embed(query)
+
+        # vector similarity for semantic/procedural
+        semantic_results = await self.vectors.search(
+            embedding=query_embedding,
+            filter={"memory_type": {"$in": memory_types}},
+            top_k=top_k,
+        )
+
+        # recency-weighted retrieval for episodic
+        episodic_results = await self.db.query(
+            """
+            SELECT * FROM episodic_memory
+            WHERE agent_id = $1
+            ORDER BY created_at DESC, similarity(embedding, $2) DESC
+            LIMIT $3
+            """,
+            agent_id, query_embedding, top_k,
+        )
+
+        return rerank(semantic_results + episodic_results, query_embedding)[:top_k]
+
+    async def store(self, chunk: MemoryChunk) -> None:
+        chunk.embedding_model = settings.CURRENT_EMBEDDING_MODEL
+        await self.vectors.upsert(chunk)
+        if chunk.memory_type == "episodic":
+            await self.db.insert("episodic_memory", chunk)
+```
+
+**Critical:** `embedding_model` must be stored with every vector. When you upgrade models, old vectors are incompatible. Mixing embeddings from different models in the same vector space produces nonsensical similarity scores. Either re-embed all vectors on model upgrade or namespace by model version.
+
+### Tool Calling with Side Effect Control
+
+Tools are how the agent acts on the world. The engineering challenge is managing side effects:
+
+```python
+from enum import Enum
+from typing import Any
+
+class ToolRiskLevel(Enum):
+    READ_ONLY = "read_only"        # safe to call without confirmation
+    REVERSIBLE_WRITE = "reversible"  # can be undone, warn user
+    IRREVERSIBLE = "irreversible"  # requires explicit confirmation
+
+@dataclass
+class Tool:
+    name: str
+    description: str
+    risk_level: ToolRiskLevel
+    parameters_schema: dict
+    handler: callable
+
+TOOL_REGISTRY = {
+    "search_documentation": Tool(
+        name="search_documentation",
+        description="Search internal documentation for relevant information",
+        risk_level=ToolRiskLevel.READ_ONLY,
+        parameters_schema={"query": {"type": "string"}},
+        handler=search_docs,
+    ),
+    "create_github_issue": Tool(
+        name="create_github_issue",
+        description="Create a GitHub issue in the specified repository",
+        risk_level=ToolRiskLevel.REVERSIBLE_WRITE,
+        parameters_schema={"title": {"type": "string"}, "body": {"type": "string"}},
+        handler=create_issue,
+    ),
+    "deploy_to_production": Tool(
+        name="deploy_to_production",
+        description="Deploy the specified service version to production",
+        risk_level=ToolRiskLevel.IRREVERSIBLE,
+        parameters_schema={"service": {"type": "string"}, "version": {"type": "string"}},
+        handler=deploy_service,
+    ),
+}
+
+async def execute_tool(
+    tool_name: str,
+    parameters: dict,
+    require_confirmation_for: set[ToolRiskLevel] = {ToolRiskLevel.IRREVERSIBLE}
+) -> Any:
+    tool = TOOL_REGISTRY.get(tool_name)
+    if not tool:
+        raise UnknownToolError(f"Tool '{tool_name}' not registered")
+
+    if tool.risk_level in require_confirmation_for:
+        # surface to UI for human approval before executing
+        raise RequiresConfirmationError(
+            tool=tool_name,
+            parameters=parameters,
+            risk_level=tool.risk_level.value,
+        )
+
+    return await tool.handler(**parameters)
+```
+
+Every irreversible action should flow through a human-in-the-loop confirmation step. Agents that can autonomously deploy to production, send emails, or modify production databases are incident reports waiting to happen.
+
+### Prompt Engineering as Architecture
+
+Prompts are not strings. They are the specification layer of cognitive systems:
+
+```python
+from string import Template
+
+SYSTEM_PROMPT = """You are a backend engineering assistant with access to:
+- The team's internal documentation (search_documentation tool)
+- GitHub issue creation (create_github_issue tool)
+- Codebase search (search_codebase tool)
+
+When answering questions about the codebase, always search documentation first.
+When creating issues, always confirm the title and description before submitting.
+Never guess at implementation details — search first, then answer.
+
+Current context:
+- Repository: {repository}
+- User role: {user_role}
+- Session ID: {session_id}
+"""
+
+def build_system_prompt(context: AgentContext) -> str:
+    return Template(SYSTEM_PROMPT).safe_substitute(
+        repository=context.repository,
+        user_role=context.user_role,
+        session_id=context.session_id,
+    )
+```
+
+System prompts must be versioned alongside code. A change to the system prompt is a behavior change to the agent. It requires testing against your evaluation suite before deployment, exactly like a code change.
+
+### Evaluation: Testing Non-Deterministic Systems
+
+Unit tests don't apply. LLM outputs are non-deterministic. The discipline is evaluation:
+
+```python
+from datasets import Dataset
+
+EVALUATION_CASES = [
+    {
+        "input": "How do I configure the connection pool?",
+        "expected_tool_calls": ["search_documentation"],
+        "expected_output_contains": ["pool_size", "max_connections"],
+        "expected_output_not_contains": ["I don't know", "I'm not sure"],
+    },
+    {
+        "input": "Deploy version 2.3.1 of the auth service",
+        "expected_raises": "RequiresConfirmationError",
+        "expected_confirmation_tool": "deploy_to_production",
+    },
+]
+
+async def evaluate_agent(agent: CognitiveAgent, cases: list[dict]) -> EvalReport:
+    results = []
+    for case in cases:
+        try:
+            result = await agent.run(case["input"])
+            passed = all([
+                all(t in result.tool_calls for t in case.get("expected_tool_calls", [])),
+                all(s in result.output for s in case.get("expected_output_contains", [])),
+                all(s not in result.output for s in case.get("expected_output_not_contains", [])),
+            ])
+        except Exception as e:
+            passed = (
+                type(e).__name__ == case.get("expected_raises")
+                and e.tool == case.get("expected_confirmation_tool")
+            )
+        results.append({"case": case["input"], "passed": passed})
+
+    return EvalReport(results=results, pass_rate=sum(r["passed"] for r in results) / len(results))
+```
+
+Run evaluations on every prompt change, every model upgrade, every tool change. A regression in evaluation suite pass rate blocks the deployment.
+
+## Engineering Lessons
+
+**1. Start with a monolithic agent before distributing.** Multi-agent architectures introduce distributed systems complexity before you understand the core reasoning requirements. Build one agent that works well. Extract specialized sub-agents when there's evidence for the need.
+
+**2. Memory is infrastructure.** Treat your vector store, embedding pipeline, and memory retrieval system with the same rigor as your database. Schema migrations, backup policies, re-embedding pipelines on model upgrades — all of this is memory infrastructure work.
+
+**3. Observability for AI systems requires new primitives.** Logs, metrics, and traces are necessary but not sufficient. You need: prompt/response logging with PII scrubbing, tool call audit trails, reasoning trace capture, latency per reasoning step, and semantic evaluation metrics. Build this before you have incidents you can't explain.
+
+**4. The context window is your working memory.** LLMs do not persist state between API calls. The context window — what you put in the prompt — is the agent's entire working memory for that reasoning step. Context assembly (what to include, in what order, at what level of detail) is one of the highest-leverage engineering decisions in cognitive system design.
+
+**5. Failure modes in AI systems are qualitative, not binary.** A crashed service is a 0 or 1. An LLM that confidently gives wrong information is a gradient — it technically "worked," it just produced bad output. Your evaluation pipeline must catch qualitative degradation. This requires domain-specific test cases written by engineers who understand what "correct" looks like.
+
+Cognitive systems are not a feature category. They are a new discipline of software engineering — one that requires understanding language models, memory architectures, tool safety, probabilistic evaluation, and the failure modes that emerge when software starts to reason.
+
+The engineers who master this discipline in the next three years will define how intelligent systems are built for the next decade.

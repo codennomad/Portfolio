@@ -1,0 +1,212 @@
+---
+title: "Inside Modern Linux RATs: Persistence, Evasion and Detection"
+date: "2026-03-24"
+description: "A technical analysis of persistence techniques used by modern Linux Remote Access Trojans — LD_PRELOAD injection, systemd abuse, cron hijacking, and credential harvesting — with detection and defense strategies."
+tags: ["Security", "Linux", "Reverse Engineering", "Detection", "Defense"]
+published: true
+---
+
+> "The most successful persistence mechanisms are the ones that look exactly like legitimate system activity."
+
+A Linux RAT that gets caught is not a good RAT. The ones that matter — the ones found in real incident reports — survive for weeks or months on compromised systems because they hide in plain sight: as system services, as shared libraries loaded by every process, as scheduled tasks that blend into normal cron output.
+
+This is a technical analysis of the techniques. Understanding how they work is the prerequisite for detecting and removing them.
+
+## The Real Problem
+
+Linux system administrators often assume that server security reduces to: keep packages updated, use SSH keys, restrict root access. These are correct baseline controls. They do not address post-exploitation persistence.
+
+Once an attacker has code execution — through a vulnerable web application, a misconfigured CI runner, a compromised deployment pipeline — the question becomes: how do they maintain access after you patch the initial entry point?
+
+The answer is persistence. And most persistence techniques abuse legitimate Linux subsystems in ways that are difficult to distinguish from normal operation.
+
+## Deep Engineering
+
+### Persistence Technique 1: LD_PRELOAD Injection
+
+`LD_PRELOAD` is a legitimate Linux feature: it allows specifying a shared library that is loaded *before* any other library in every dynamically linked process. Its intended use is overriding library functions for testing or compatibility.
+
+An attacker writes a shared library that intercepts `sshd`'s authentication functions:
+
+```c
+// malicious.c — compiled to malicious.so
+#define _GNU_SOURCE
+#include <dlfcn.h>
+#include <stdio.h>
+#include <string.h>
+
+// intercept PAM authentication
+int pam_authenticate(void *pamh, int flags) {
+    // original function pointer
+    int (*original)(void *, int) = dlsym(RTLD_NEXT, "pam_authenticate");
+
+    // exfiltrate credentials before calling original
+    // (simplified — real implementations are more covert)
+    FILE *f = fopen("/tmp/.syslog", "a");
+    if (f) {
+        fprintf(f, "[auth]\n");
+        fclose(f);
+    }
+
+    return original(pamh, flags);
+}
+```
+
+Set persistence via `/etc/ld.so.preload` (requires root) or per-user via `~/.bashrc`:
+
+```bash
+export LD_PRELOAD=/lib/libsystemd-helper.so  # named to blend in
+```
+
+**Detection:**
+```bash
+# Check /etc/ld.so.preload — should be empty or absent on most systems
+cat /etc/ld.so.preload
+
+# Check for LD_PRELOAD in process environments
+for pid in /proc/[0-9]*/environ; do
+    strings "$pid" 2>/dev/null | grep LD_PRELOAD && echo "Found in $pid"
+done
+
+# Scan for unexpected shared libraries
+ldconfig -p | awk '{print $4}' | xargs -I{} sha256sum {} 2>/dev/null \
+  | sort > /tmp/lib_hashes_$(date +%Y%m%d).txt
+# Compare against known-good baseline
+```
+
+### Persistence Technique 2: Systemd Service Abuse
+
+Systemd is the most powerful persistence mechanism available on modern Linux. A malicious service unit file looks indistinguishable from legitimate services:
+
+```ini
+# /etc/systemd/system/systemd-network-sync.service
+# (named to blend with legitimate systemd services)
+[Unit]
+Description=Network Synchronization Service
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=5
+ExecStart=/usr/lib/systemd/systemd-network-sync
+User=www-data
+
+[Install]
+WantedBy=multi-user.target
+```
+
+The binary at `/usr/lib/systemd/systemd-network-sync` is the payload. It's owned by root, located in a directory that's not normally audited, and restarts automatically if killed.
+
+**Detection:**
+```bash
+# List all enabled services — compare against expected baseline
+systemctl list-unit-files --type=service --state=enabled
+
+# Find recently modified service files (last 30 days)
+find /etc/systemd /usr/lib/systemd /usr/local/lib/systemd \
+  -name "*.service" -newer /etc/passwd -ls
+
+# Verify service binary paths make sense
+systemctl show --property=ExecStart --all $(systemctl list-units --type=service --no-legend | awk '{print $1}') \
+  | grep ExecStart | grep -v "^ExecStart=$"
+```
+
+### Persistence Technique 3: Cron Hijacking
+
+Cron is a low-noise persistence vector because legitimate cron jobs already exist on most systems:
+
+```bash
+# Added to /etc/cron.d/syscheck (looks like a monitoring job)
+*/15 * * * * root /usr/local/bin/syscheck.sh >/dev/null 2>&1
+
+# Or user crontab modification
+(crontab -l 2>/dev/null; echo "*/5 * * * * /tmp/.cache/update >/dev/null 2>&1") | crontab -
+```
+
+The payload at `/tmp/.cache/update` is a re-downloader: if the main C2 implant is detected and removed, the cron job re-fetches and re-installs it.
+
+**Detection:**
+```bash
+# Audit all cron locations
+find /etc/cron* /var/spool/cron -type f -ls 2>/dev/null
+
+# Check for recently modified crontab entries
+for user in $(cut -d: -f1 /etc/passwd); do
+    crontab -l -u "$user" 2>/dev/null | grep -v "^#" | grep -v "^$" \
+      && echo "  ^ user: $user"
+done
+
+# Monitor cron directory for changes (using inotify)
+inotifywait -m -r /etc/cron.d /var/spool/cron -e modify,create,delete
+```
+
+### Persistence Technique 4: SSH Authorized Keys Modification
+
+The simplest and most durable persistence: adding an attacker-controlled public key to `~/.ssh/authorized_keys`:
+
+```bash
+mkdir -p ~/.ssh
+echo "ssh-ed25519 AAAA...attacker_key root@pivot" >> ~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys
+```
+
+**Detection:**
+```bash
+# Audit authorized_keys for all users
+while IFS=: read -r user _ _ _ _ home _; do
+    keyfile="$home/.ssh/authorized_keys"
+    if [ -f "$keyfile" ]; then
+        echo "=== $user ($keyfile) ==="
+        cat "$keyfile"
+    fi
+done < /etc/passwd
+
+# Monitor with auditd
+auditctl -w /root/.ssh/authorized_keys -p wa -k ssh_key_changes
+auditctl -w /home -p wa -k home_ssh_changes
+```
+
+### Behavioral Detection: What to Actually Monitor
+
+Individual technique detection is whack-a-mole. Behavioral monitoring catches the class of attack:
+
+```bash
+# auditd rules for anomalous behavior (add to /etc/audit/rules.d/persistence.rules)
+
+# New outbound connections from web server processes
+-a always,exit -F arch=b64 -S connect -F uid=www-data -k webserver_connect
+
+# Execution of binaries from /tmp, /dev/shm, /var/tmp
+-a always,exit -F arch=b64 -S execve -F dir=/tmp -k exec_from_tmp
+-a always,exit -F arch=b64 -S execve -F dir=/dev/shm -k exec_from_shm
+
+# Writes to sensitive persistence locations
+-w /etc/cron.d -p wa -k cron_modification
+-w /etc/systemd/system -p wa -k systemd_modification
+-w /etc/ld.so.preload -p wa -k ldpreload_modification
+-w /etc/passwd -p wa -k passwd_modification
+
+# Privileged commands executed by non-root users
+-a always,exit -F arch=b64 -S setuid -F a0!=0 -k setuid_non_root
+```
+
+Query auditd logs:
+```bash
+ausearch -k exec_from_tmp --start today | aureport -f -i
+```
+
+## Engineering Lessons
+
+**1. Establish a file system baseline.** Tools like `AIDE` or `Tripwire` hash critical files and directories at a known-clean state. Deviations are alerts. This catches modified binaries, new service files, and added cron jobs — before they're leveraged.
+
+**2. Immutable infrastructure reduces the persistence surface.** If your servers are replaced rather than patched (container-based, AMI-based deployments), persistence mechanisms are evicted on every deploy cycle. An attacker must re-compromise after every update.
+
+**3. Restrict `LD_PRELOAD` in production.** Most production services have no legitimate need for `LD_PRELOAD`. Add `NoNewPrivileges=true` and `PrivateTmp=true` to systemd service units. Use seccomp profiles to limit syscalls available to web processes.
+
+**4. Monitor outbound connections, not just inbound.** C2 communication is outbound: the compromised machine calls home. Egress filtering and monitoring (`nftables` rules, `conntrack` logs) catches this. Most incident responders see it too late because they only monitor inbound traffic.
+
+**5. Treat incident response as archaeology.** When you find one persistence mechanism, assume there are three more. Walk the full persistence surface: cron, systemd, authorized_keys, `/etc/ld.so.preload`, `~/.bashrc`, `/etc/profile.d/`, startup scripts. Don't stop at the first discovery.
+
+Understanding how attackers maintain access is how you design systems that make persistence harder — and detection faster.
