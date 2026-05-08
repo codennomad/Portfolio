@@ -16,6 +16,7 @@
 # next.js
 /.next/
 /out/
+next-env.d.ts
 
 # production
 /build
@@ -30,12 +31,28 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files
 .env*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
 # vercel
 .vercel
 
 # typescript
 *.tsbuildinfo
+next-env.d.ts
+
+# lock files — project uses pnpm, ignore npm's lock file
+package-lock.json
+
+# editor
+.vscode/settings.json
+.idea/
+
+# OS
+Thumbs.db
+
 next-env.d.ts
