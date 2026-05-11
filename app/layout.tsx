@@ -3,6 +3,7 @@ import { JetBrains_Mono, Space_Grotesk } from "next/font/google"
 import "./globals.css"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { siteConfig } from "@/lib/data"
+import { KonamiEasterEgg } from "@/components/effects/KonamiEasterEgg"
 
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-space-grotesk",
@@ -46,6 +47,7 @@ export const metadata: Metadata = {
     title: `${siteConfig.name} — Mid-level Backend + AI Engineer`,
     description:
       "Mid-level Backend + AI Engineer specializing in AI systems, cognitive pipelines, and high-performance architectures.",
+    images: [{ url: "/opengraph-image", width: 1200, height: 630, alt: `${siteConfig.name} — ${siteConfig.title}` }],
   },
   twitter: {
     card: "summary_large_image",
@@ -53,6 +55,7 @@ export const metadata: Metadata = {
     title: `${siteConfig.name} — Mid-level Backend + AI Engineer`,
     description:
       "Mid-level Backend + AI Engineer specializing in AI systems, cognitive pipelines, and high-performance architectures.",
+    images: ["/opengraph-image"],
   },
   robots: {
     index: true,
@@ -118,7 +121,10 @@ export default function RootLayout({
             }),
           }}
         />
-        <TooltipProvider>{children}</TooltipProvider>
+        <TooltipProvider>
+          <KonamiEasterEgg />
+          {children}
+        </TooltipProvider>
       </body>
     </html>
   )
