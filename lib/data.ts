@@ -190,6 +190,7 @@ export const featuredProjects = [
     github: "https://github.com/codennomad/analytics-saas",
     stars: 1,
     language: "TypeScript",
+    metric: "sub-200ms p99",
   },
   {
     slug: "csv-parsing",
@@ -202,6 +203,7 @@ export const featuredProjects = [
     github: "https://github.com/codennomad/csv_parsing",
     stars: 0,
     language: "Rust",
+    metric: "41 MiB/s",
   },
   {
     slug: "feature-flags",
@@ -214,6 +216,7 @@ export const featuredProjects = [
     github: "https://github.com/codennomad/Feature_Flags",
     stars: 0,
     language: "Python",
+    metric: "<1ms eval",
   },
   {
     slug: "aegis-workers",
@@ -226,6 +229,7 @@ export const featuredProjects = [
     github: "https://github.com/codennomad/aegis-workers",
     stars: 0,
     language: "Python",
+    metric: "5k req/s",
   },
   {
     slug: "sae",
@@ -238,6 +242,7 @@ export const featuredProjects = [
     github: "https://github.com/codennomad/SAE",
     stars: 0,
     language: "Rust",
+    metric: "zero-persist",
   },
   {
     slug: "noctivox",
@@ -250,6 +255,7 @@ export const featuredProjects = [
     github: "https://github.com/codennomad/NoctiVox",
     stars: 0,
     language: "Python",
+    metric: "GPU-accel",
   },
   {
     slug: "lienyx",
@@ -262,6 +268,7 @@ export const featuredProjects = [
     github: "https://github.com/codennomad/LIENYX",
     stars: 0,
     language: "Python",
+    metric: "multi-modal",
   },
   {
     slug: "message-broker",
@@ -274,6 +281,7 @@ export const featuredProjects = [
     github: "https://github.com/codennomad/Message_Broker",
     stars: 0,
     language: "Rust",
+    metric: "async TCP",
   },
   {
     slug: "butler",
@@ -286,6 +294,7 @@ export const featuredProjects = [
     github: "https://github.com/codennomad/Butler",
     stars: 0,
     language: "Python",
+    metric: "real-time VAD",
   },
   {
     slug: "nytheris-core",
@@ -298,6 +307,7 @@ export const featuredProjects = [
     github: "https://github.com/codennomad/nytheris_core",
     stars: 1,
     language: "Python",
+    metric: "real-time obs",
   },
 ]
 

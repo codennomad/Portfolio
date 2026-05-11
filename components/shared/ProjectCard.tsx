@@ -17,6 +17,7 @@ interface ProjectCardProps {
   stars?: number
   forks?: number
   language?: string
+  metric?: string
   index?: number
   onClick?: () => void
 }
@@ -36,6 +37,7 @@ export function ProjectCard({
   stars = 0,
   forks = 0,
   language,
+  metric,
   index = 0,
   onClick,
 }: ProjectCardProps) {
@@ -69,9 +71,24 @@ export function ProjectCard({
               {statusStyle.label}
             </Badge>
           </div>
-          {language && (
-            <span className="font-mono text-[11px] text-muted-foreground">{language}</span>
-          )}
+          <div className="flex items-center gap-2 mt-1">
+            {language && (
+              <span className="font-mono text-[11px] text-muted-foreground">{language}</span>
+            )}
+            {metric && (
+              <span
+                className="font-mono text-[10px] px-1.5 py-0.5 rounded"
+                style={{
+                  color: "var(--primary)",
+                  background: "rgba(168,85,247,0.12)",
+                  border: "1px solid rgba(168,85,247,0.35)",
+                  boxShadow: "0 0 8px rgba(168,85,247,0.2)",
+                }}
+              >
+                ⚡ {metric}
+              </span>
+            )}
+          </div>
         </CardHeader>
 
         <CardContent className="flex-1 pb-3">

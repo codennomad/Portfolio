@@ -18,6 +18,12 @@ import type { ProjectCategory } from "@/lib/data"
 import { ExternalLink } from "lucide-react"
 import { GithubIcon } from "@/components/shared/BrandIcons"
 import Link from "next/link"
+import dynamic from "next/dynamic"
+
+const CsvBenchmarkChart = dynamic(
+  () => import("@/components/sections/CsvBenchmarkChart").then((m) => ({ default: m.CsvBenchmarkChart })),
+  { ssr: false }
+)
 
 export function Projects() {
   const [category, setCategory] = useState<ProjectCategory>("All")
@@ -132,6 +138,13 @@ export function Projects() {
                     ))}
                   </div>
                 </div>
+
+                {/* Interactive benchmark chart for csv_parsing */}
+                {selected.slug === "csv-parsing" && (
+                  <div className="border border-border rounded-md p-3">
+                    <CsvBenchmarkChart />
+                  </div>
+                )}
 
                 <div className="flex gap-2 pt-2">
                   <Link
