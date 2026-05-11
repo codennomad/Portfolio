@@ -10,11 +10,13 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { siteConfig } from "@/lib/data"
 
 const navLinks = [
-  { href: "#about", label: "about" },
-  { href: "#projects", label: "projects" },
-  { href: "#skills", label: "skills" },
-  { href: "#blog", label: "blog" },
-  { href: "#contact", label: "contact" },
+  { href: "#about", label: "about", hash: true },
+  { href: "#projects", label: "projects", hash: true },
+  { href: "#skills", label: "skills", hash: true },
+  { href: "#blog", label: "blog", hash: true },
+  { href: "#contact", label: "contact", hash: true },
+  { href: "/now", label: "now", hash: false },
+  { href: "/uses", label: "uses", hash: false },
 ]
 
 export function NavBar() {
@@ -22,8 +24,8 @@ export function NavBar() {
   const [open, setOpen] = useState(false)
   const pathname = usePathname()
 
-  const resolveHref = (hash: string) =>
-    pathname === "/" ? hash : `/${hash}`
+  const resolveHref = (link: (typeof navLinks)[0]) =>
+    !link.hash ? link.href : pathname === "/" ? link.href : `/${link.href}`
 
   useEffect(() => {
     const handler = () => setScrolled(window.scrollY > 20)
@@ -57,7 +59,7 @@ export function NavBar() {
           {navLinks.map((link) => (
             <Link
               key={link.href}
-              href={resolveHref(link.href)}
+              href={resolveHref(link)}
               className="font-mono text-xs text-muted-foreground hover:text-primary transition-colors"
             >
               {link.label}
@@ -93,9 +95,9 @@ export function NavBar() {
                 {navLinks.map((link) => (
                   <Link
                     key={link.href}
-                    href={resolveHref(link.href)}
+                    href={resolveHref(link)}
                     onClick={() => setOpen(false)}
-                    className="font-mono text-sm text-foreground hover:text-primary transition-colors min-h-[48px] flex items-center px-3 rounded hover:bg-muted"
+                    className="font-mono text-sm text-foreground hover:text-primary transition-colors min-h-12 flex items-center px-3 rounded hover:bg-muted"
                   >
                     <span className="text-primary mr-2">→</span>
                     {link.label}

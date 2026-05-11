@@ -12,7 +12,7 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command"
-import { FileText, User, Code2, Mail, Home } from "lucide-react"
+import { FileText, User, Code2, Mail, Home, Wrench, Clock } from "lucide-react"
 import { GithubIcon } from "@/components/shared/BrandIcons"
 import { siteConfig, featuredProjects } from "@/lib/data"
 
@@ -69,6 +69,14 @@ export function CommandPalette() {
           <CommandItem onSelect={() => run(() => scrollTo("contact"))}>
             <Mail className="mr-2 h-4 w-4" />
             Contact
+          </CommandItem>
+          <CommandItem onSelect={() => run(() => router.push("/uses"))}>
+            <Wrench className="mr-2 h-4 w-4" />
+            Uses
+          </CommandItem>
+          <CommandItem onSelect={() => run(() => router.push("/now"))}>
+            <Clock className="mr-2 h-4 w-4" />
+            Now
           </CommandItem>
         </CommandGroup>
 
