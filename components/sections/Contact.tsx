@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { motion } from "framer-motion"
 import { Mail, Copy, Check } from "lucide-react"
 import { GithubIcon, LinkedinIcon, YoutubeIcon, InstagramIcon } from "@/components/shared/BrandIcons"
@@ -12,6 +12,10 @@ interface TerminalLine {
   content: string
 }
 
+const COMMAND_KEYS = [
+  "help", "whoami", "skills", "projects", "contact", "github", "clear", "matrix", "now", "uses",
+] as const
+
 const COMMANDS: Record<string, string[]> = {
   help: [
     "Available commands:",
@@ -21,8 +25,12 @@ const COMMANDS: Record<string, string[]> = {
     "  projects  → featured projects",
     "  contact   → ways to reach me",
     "  github    → open GitHub profile",
-    "  clear     → clear terminal",
+    "  now       → what I'm doing now",
+    "  uses      → my setup & tools",
+    "  clear     → clear terminal   (Ctrl+L)",
     "  matrix    → ;)",
+    "",
+    "Shortcuts: ↑↓ history · Tab autocomplete · Ctrl+L clear",
   ],
   whoami: [
     `${siteConfig.name}`,
@@ -57,12 +65,33 @@ const COMMANDS: Record<string, string[]> = {
     `Instagram: @codennomad`,
   ],
   github: [`Opening ${siteConfig.github} ...`],
+  now: [`Opening /now ...`],
+  uses: [`Opening /uses ...`],
   matrix: [
     "01001000 01100001 01100011 01101011 01100101 01110010",
     "███╗░░░███╗░█████╗░████████╗██████╗░██╗██╗░░██╗",
     "░░░ ACCESS GRANTED ░░░",
     "Welcome to the matrix, codennomad.",
   ],
+}
+
+const SESSION_HISTORY_KEY = "terminal_history"
+
+function loadHistory(): string[] {
+  if (typeof window === "undefined") return []
+  try {
+    return JSON.parse(sessionStorage.getItem(SESSION_HISTORY_KEY) ?? "[]")
+  } catch {
+    return []
+  }
+}
+
+function saveHistory(h: string[]) {
+  try {
+    sessionStorage.setItem(SESSION_HISTORY_KEY, JSON.stringify(h.slice(0, 50)))
+  } catch {
+    // sessionStorage unavailable
+  }
 }
 
 const socialLinks = [
@@ -78,7 +107,7 @@ export function Contact() {
     { type: "output", content: 'Type "help" to see available commands.' },
   ])
   const [input, setInput] = useState("")
-  const [history, setHistory] = useState<string[]>([])
+  const [history, setHistory] = useState<string[]>(() => loadHistory())
   const [historyIndex, setHistoryIndex] = useState(-1)
   const [copied, setCopied] = useState(false)
   const terminalRef = useRef<HTMLDivElement>(null)
@@ -88,12 +117,26 @@ export function Contact() {
     terminalRef.current?.scrollTo(0, terminalRef.current.scrollHeight)
   }, [lines])
 
-  const handleCommand = (cmd: string) => {
+  const pushHistory = useCallback((cmd: string) => {
+    setHistory((h) => {
+      // deduplicate: remove existing entry if present, then prepend
+      const deduped = [cmd, ...h.filter((c) => c !== cmd)]
+      saveHistory(deduped)
+      return deduped
+    })
+    setHistoryIndex(-1)
+  }, [])
+
+  const clearTerminal = useCallback(() => {
+    setLines([])
+    setInput("")
+  }, [])
+
+  const handleCommand = useCallback((cmd: string) => {
     const trimmed = cmd.trim().toLowerCase()
 
     setLines((prev) => [...prev, { type: "input", content: `$ ${cmd}` }])
-    setHistory((h) => [cmd, ...h])
-    setHistoryIndex(-1)
+    if (trimmed) pushHistory(cmd.trim())
 
     if (trimmed === "clear") {
       setLines([])
@@ -102,7 +145,19 @@ export function Contact() {
         ...prev,
         ...COMMANDS.github.map((c) => ({ type: "output" as const, content: c })),
       ])
-      setTimeout(() => window.open(siteConfig.github, "_blank"), 500)
+      setTimeout(() => window.open(siteConfig.github, "_blank"), 400)
+    } else if (trimmed === "now") {
+      setLines((prev) => [
+        ...prev,
+        ...COMMANDS.now.map((c) => ({ type: "output" as const, content: c })),
+      ])
+      setTimeout(() => window.open("/now", "_blank"), 400)
+    } else if (trimmed === "uses") {
+      setLines((prev) => [
+        ...prev,
+        ...COMMANDS.uses.map((c) => ({ type: "output" as const, content: c })),
+      ])
+      setTimeout(() => window.open("/uses", "_blank"), 400)
     } else if (COMMANDS[trimmed]) {
       setLines((prev) => [
         ...prev,
@@ -118,11 +173,28 @@ export function Contact() {
     }
 
     setInput("")
-  }
+  }, [pushHistory])
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       handleCommand(input)
+    } else if (e.key === "Tab") {
+      e.preventDefault()
+      const prefix = input.toLowerCase()
+      if (!prefix) return
+      const matches = COMMAND_KEYS.filter((k) => k.startsWith(prefix))
+      if (matches.length === 1) {
+        setInput(matches[0])
+      } else if (matches.length > 1) {
+        // Show candidates
+        setLines((prev) => [
+          ...prev,
+          { type: "output", content: matches.join("    ") },
+        ])
+      }
+    } else if (e.key === "l" && e.ctrlKey) {
+      e.preventDefault()
+      clearTerminal()
     } else if (e.key === "ArrowUp") {
       e.preventDefault()
       const idx = Math.min(historyIndex + 1, history.length - 1)
@@ -134,7 +206,7 @@ export function Contact() {
       setHistoryIndex(idx)
       setInput(idx === -1 ? "" : history[idx])
     }
-  }
+  }, [input, history, historyIndex, handleCommand, clearTerminal])
 
   const copyEmail = async () => {
     await navigator.clipboard.writeText(siteConfig.email)
@@ -173,7 +245,7 @@ export function Contact() {
                 href={href}
                 target={href.startsWith("mailto") ? undefined : "_blank"}
                 rel={href.startsWith("mailto") ? undefined : "noopener noreferrer"}
-                className="flex items-center gap-4 p-3 min-h-[48px] rounded-lg border border-border glass-card hover:border-primary/40 hover:text-primary transition-all duration-200 group"
+                className="flex items-center gap-4 p-3 min-h-12 rounded-lg border border-border glass-card hover:border-primary/40 hover:text-primary transition-all duration-200 group"
               >
                 <Icon size={16} className="text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
                 <div className="min-w-0">
@@ -186,7 +258,7 @@ export function Contact() {
                   <button
                     type="button"
                     onClick={(e) => { e.preventDefault(); copyEmail() }}
-                    className="ml-auto min-h-[44px] min-w-[44px] inline-flex items-center justify-center text-muted-foreground hover:text-primary transition-colors shrink-0"
+                    className="ml-auto min-h-11 min-w-11 inline-flex items-center justify-center text-muted-foreground hover:text-primary transition-colors shrink-0"
                     aria-label="Copy email"
                   >
                     {copied ? <Check size={13} /> : <Copy size={13} />}
@@ -256,3 +328,4 @@ export function Contact() {
     </section>
   )
 }
+
