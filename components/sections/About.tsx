@@ -2,7 +2,14 @@
 
 import { motion } from "framer-motion"
 import { SkillBadge } from "@/components/shared/SkillBadge"
+import { ContributionHeatmap } from "@/components/effects/ContributionHeatmap"
 import { siteConfig, skills, timeline, workTimeline, funFacts } from "@/lib/data"
+import type { ContributionWeek } from "@/lib/github"
+
+interface AboutProps {
+  weeks?: ContributionWeek[]
+  totalContributions?: number
+}
 
 const containerVariants = {
   hidden: {},
@@ -14,7 +21,7 @@ const itemVariants = {
   show: { opacity: 1, x: 0, transition: { duration: 0.4 } },
 }
 
-export function About() {
+export function About({ weeks = [], totalContributions = 0 }: AboutProps) {
   return (
     <section id="about" className="py-24 max-w-6xl mx-auto px-4 sm:px-6">
       {/* Header */}
@@ -78,6 +85,11 @@ export function About() {
               )}
             </div>
           </div>
+
+          {/* GitHub activity heatmap */}
+          {weeks.length > 0 && (
+            <ContributionHeatmap weeks={weeks} totalContributions={totalContributions} />
+          )}
         </motion.div>
 
         {/* Right: Two timelines side by side */}
