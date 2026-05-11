@@ -1,3 +1,13 @@
+export interface ContributionDay {
+  date: string
+  contributionCount: number
+  weekday: number
+}
+
+export interface ContributionWeek {
+  contributionDays: ContributionDay[]
+}
+
 export interface GitHubRepo {
   name: string
   description: string | null
@@ -24,6 +34,7 @@ export interface GitHubUser {
     totalIssueContributions: number
     contributionCalendar: {
       totalContributions: number
+      weeks: ContributionWeek[]
     }
   }
   pinnedItems: {
@@ -52,6 +63,13 @@ const USER_QUERY = `
         totalIssueContributions
         contributionCalendar {
           totalContributions
+          weeks {
+            contributionDays {
+              date
+              contributionCount
+              weekday
+            }
+          }
         }
       }
       pinnedItems(first: 6, types: REPOSITORY) {
@@ -90,46 +108,51 @@ const USER_QUERY = `
   }
 `
 
-async function githubFetch<T>(query: string, variables: Record<string, unknown>): Promise<T> {
+async function githubFetch<T>(query: string, variables: Record<string, unknown>): Promise<T | null> {
   const token = process.env.GITHUB_TOKEN
+
+  // Without a token, unauthenticated requests are limited to 60/hour.
+  // Skip the request entirely to avoid rate-limit crashes in dev.
+  if (!token) {
+    return null
+  }
 
   const headers: HeadersInit = {
     "Content-Type": "application/json",
     Accept: "application/json",
+    Authorization: `Bearer ${token}`,
   }
 
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`
+  try {
+    const res = await fetch(GITHUB_GRAPHQL_URL, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ query, variables }),
+      next: { revalidate: 3600 },
+    })
+
+    if (!res.ok) {
+      console.warn(`GitHub API: ${res.status} ${res.statusText} — activity feed will be hidden`)
+      return null
+    }
+
+    const json = (await res.json()) as { data: T; errors?: { message: string }[] }
+
+    if (json.errors) {
+      console.warn("GitHub GraphQL errors:", json.errors.map((e) => e.message).join(", "))
+      return null
+    }
+
+    return json.data
+  } catch (err) {
+    console.warn("GitHub fetch failed:", err)
+    return null
   }
-
-  const res = await fetch(GITHUB_GRAPHQL_URL, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ query, variables }),
-    next: { revalidate: 3600 },
-  })
-
-  if (!res.ok) {
-    throw new Error(`GitHub API error: ${res.status} ${res.statusText}`)
-  }
-
-  const json = (await res.json()) as { data: T; errors?: { message: string }[] }
-
-  if (json.errors) {
-    throw new Error(json.errors.map((e) => e.message).join(", "))
-  }
-
-  return json.data
 }
 
 export async function getGitHubUser(login: string): Promise<GitHubUser | null> {
-  try {
-    const data = await githubFetch<{ user: GitHubUser }>(USER_QUERY, { login })
-    return data.user
-  } catch (err) {
-    console.error("Failed to fetch GitHub user:", err)
-    return null
-  }
+  const data = await githubFetch<{ user: GitHubUser }>(USER_QUERY, { login })
+  return data?.user ?? null
 }
 
 export const LANGUAGE_COLORS: Record<string, string> = {
