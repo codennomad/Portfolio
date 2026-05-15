@@ -1,15 +1,7 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-
-const KONAMI = [
-  "ArrowUp", "ArrowUp",
-  "ArrowDown", "ArrowDown",
-  "ArrowLeft", "ArrowRight",
-  "ArrowLeft", "ArrowRight",
-  "b", "a",
-]
 
 const MATRIX_CHARS = "アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン01"
 
@@ -53,28 +45,13 @@ function MatrixRain({ cols }: { cols: number }) {
 }
 
 export function KonamiEasterEgg() {
-  const [sequence, setSequence] = useState<string[]>([])
   const [active, setActive] = useState(false)
 
-  const handleKey = useCallback((e: KeyboardEvent) => {
-    // Ignore when typing in inputs
-    const tag = (e.target as HTMLElement).tagName
-    if (tag === "INPUT" || tag === "TEXTAREA") return
-
-    setSequence((prev) => {
-      const next = [...prev, e.key].slice(-KONAMI.length)
-      if (next.join(",") === KONAMI.join(",")) {
-        setActive(true)
-        return []
-      }
-      return next
-    })
-  }, [])
-
   useEffect(() => {
-    window.addEventListener("keydown", handleKey)
-    return () => window.removeEventListener("keydown", handleKey)
-  }, [handleKey])
+    const handler = () => setActive(true)
+    window.addEventListener("portfolio:easter-egg", handler)
+    return () => window.removeEventListener("portfolio:easter-egg", handler)
+  }, [])
 
   useEffect(() => {
     if (!active) return

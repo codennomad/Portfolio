@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { usePathname } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import { Menu, X, Terminal } from "lucide-react"
@@ -23,6 +23,21 @@ export function NavBar() {
   const [scrolled, setScrolled] = useState(false)
   const [open, setOpen] = useState(false)
   const pathname = usePathname()
+  const clickCount = useRef(0)
+  const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const handleLogoClick = () => {
+    clickCount.current += 1
+    if (clickTimer.current) clearTimeout(clickTimer.current)
+    if (clickCount.current >= 7) {
+      clickCount.current = 0
+      window.dispatchEvent(new CustomEvent("portfolio:easter-egg"))
+      return
+    }
+    clickTimer.current = setTimeout(() => {
+      clickCount.current = 0
+    }, 2000)
+  }
 
   const resolveHref = (link: (typeof navLinks)[0]) =>
     !link.hash ? link.href : pathname === "/" ? link.href : `/${link.href}`
@@ -45,10 +60,11 @@ export function NavBar() {
       }`}
     >
       <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
-        {/* Logo */}
+        {/* Logo — click 7× rapidly to unlock easter egg */}
         <Link
           href="/"
-          className="font-mono text-sm text-primary hover:text-primary/80 transition-colors flex items-center gap-1.5"
+          onClick={handleLogoClick}
+          className="font-mono text-sm text-primary hover:text-primary/80 transition-colors flex items-center gap-1.5 select-none"
         >
           <Terminal size={14} />
           <span>~/ {siteConfig.handle}</span>
