@@ -323,6 +323,32 @@ export const featuredProjects = [
     language: "Python",
     metric: "real-time obs",
   },
+  {
+    slug: "abyss",
+    name: "Abyss",
+    description:
+      "Personal protocol tracking platform. Define structured routines across mind, body, discipline, social and creative dimensions. XP system, heat score, and GitHub-style contribution grid.",
+    stack: ["FastAPI", "React 19", "TypeScript", "PostgreSQL", "Alembic", "PWA"],
+    category: "Backend",
+    status: "OSS" as const,
+    github: "https://github.com/codennomad/Abyss",
+    stars: 0,
+    language: "Python",
+    metric: "5 categories",
+  },
+  {
+    slug: "scryll",
+    name: "Scryll",
+    description:
+      "Self-hosted manga and manhwa reader. Resilient Python scraping engine with Cloudflare bypass, rotating proxy pool, and circuit breakers. JWT-authenticated FastAPI backend + React reader UI.",
+    stack: ["Python", "FastAPI", "React", "Vite", "Selenium", "PM2"],
+    category: "Backend",
+    status: "OSS" as const,
+    github: "https://github.com/codennomad/Scryll",
+    stars: 0,
+    language: "Python",
+    metric: "self-hosted",
+  },
 ]
 
 export const projectCategories = ["All", "Backend", "AI/ML", "Security", "Frontend", "OSS"] as const
