@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <rect width="512" height="512" rx="96" fill="#0a0a0f"/>
+  <rect x="48" y="48" width="416" height="416" rx="72" fill="#0d0d16"/>
+  <rect x="48" y="48" width="416" height="416" rx="72" stroke="#a855f7" stroke-width="6" stroke-opacity="0.4"/>
+  <!-- Terminal prompt: > -->
+  <path d="M120 220 L200 256 L120 292" stroke="#a855f7" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <!-- Underscore cursor -->
+  <rect x="224" y="280" width="168" height="20" rx="10" fill="#a855f7" opacity="0.9"/>
+  <!-- Glow effect -->
+  <path d="M120 220 L200 256 L120 292" stroke="#a855f7" stroke-width="40" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.15"/>
+</svg>

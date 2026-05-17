@@ -114,10 +114,10 @@ export function About({ weeks = [], totalContributions = 0 }: AboutProps) {
                 <motion.div key={i} variants={itemVariants} className="relative">
                   <div className="absolute -left-5.25 w-2.5 h-2.5 rounded-full bg-primary/20 border-2 border-primary/60 top-1" />
                   <div className="space-y-0.5">
-                    <p className="font-mono text-[10px] text-primary">{item.year}</p>
+                    <p className="font-mono text-[11px] sm:text-[10px] text-primary">{item.year}</p>
                     <h3 className="font-semibold text-foreground text-xs leading-snug">{item.title}</h3>
-                    <p className="text-[10px] text-muted-foreground">{item.company}</p>
-                    <p className="text-[11px] text-muted-foreground leading-relaxed mt-1">
+                    <p className="text-[11px] sm:text-[10px] text-muted-foreground">{item.company}</p>
+                    <p className="text-xs sm:text-[11px] text-muted-foreground leading-relaxed mt-1">
                       {item.description}
                     </p>
                     <div className="flex flex-wrap gap-1 mt-2">
@@ -145,11 +145,11 @@ export function About({ weeks = [], totalContributions = 0 }: AboutProps) {
                 <motion.div key={i} variants={itemVariants} className="relative">
                   <div className="absolute -left-5.25 w-2.5 h-2.5 rounded-full bg-secondary/30 border-2 border-secondary/70 top-1" />
                   <div className="space-y-0.5">
-                    <p className="font-mono text-[10px] text-primary">{item.period}</p>
+                    <p className="font-mono text-[11px] sm:text-[10px] text-primary">{item.period}</p>
                     <h3 className="font-semibold text-foreground text-xs leading-snug">{item.title}</h3>
-                    <p className="text-[10px] text-muted-foreground font-medium">{item.company}</p>
-                    <p className="font-mono text-[9px] text-secondary/80">{item.type}</p>
-                    <p className="text-[11px] text-muted-foreground leading-relaxed mt-1">
+                    <p className="text-[11px] sm:text-[10px] text-muted-foreground font-medium">{item.company}</p>
+                    <p className="font-mono text-[10px] sm:text-[9px] text-secondary/80">{item.type}</p>
+                    <p className="text-xs sm:text-[11px] text-muted-foreground leading-relaxed mt-1">
                       {item.description}
                     </p>
                     <div className="flex flex-wrap gap-1 mt-2">

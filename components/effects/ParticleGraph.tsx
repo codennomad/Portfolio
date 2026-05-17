@@ -15,7 +15,6 @@ interface Connection {
   opacity: number
 }
 
-const PARTICLE_COUNT = 60
 const MAX_DISTANCE = 120
 const PARTICLE_SPEED = 0.3
 const PRIMARY_COLOR = "168, 85, 247"
@@ -26,10 +25,15 @@ export function ParticleGraph() {
   const animRef = useRef<number>(0)
 
   useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return
+
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext("2d")
     if (!ctx) return
+
+    const getParticleCount = () =>
+      window.matchMedia("(max-width: 768px)").matches ? 25 : 60
 
     const resize = () => {
       canvas.width = canvas.offsetWidth
@@ -37,7 +41,8 @@ export function ParticleGraph() {
     }
 
     const init = () => {
-      particles.current = Array.from({ length: PARTICLE_COUNT }, () => ({
+      const count = getParticleCount()
+      particles.current = Array.from({ length: count }, () => ({
         x: Math.random() * canvas.width,
         y: Math.random() * canvas.height,
         vx: (Math.random() - 0.5) * PARTICLE_SPEED,
@@ -101,6 +106,7 @@ export function ParticleGraph() {
     const observer = new ResizeObserver(() => {
       resize()
       init()
+      // re-init with updated count when crossing mobile breakpoint
     })
     observer.observe(canvas)
 

@@ -4,6 +4,7 @@ import "./globals.css"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { siteConfig } from "@/lib/data"
 import { KonamiEasterEgg } from "@/components/effects/KonamiEasterEgg"
+import { MotionProvider } from "@/components/shared/MotionProvider"
 
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-space-grotesk",
@@ -121,10 +122,12 @@ export default function RootLayout({
             }),
           }}
         />
-        <TooltipProvider>
-          <KonamiEasterEgg />
-          {children}
-        </TooltipProvider>
+        <MotionProvider>
+          <TooltipProvider>
+            <KonamiEasterEgg />
+            {children}
+          </TooltipProvider>
+        </MotionProvider>
       </body>
     </html>
   )

@@ -14,6 +14,7 @@ interface ProjectCardProps {
   stack: string[]
   status: ProjectStatus
   github: string
+  demo?: string
   stars?: number
   forks?: number
   language?: string
@@ -23,8 +24,9 @@ interface ProjectCardProps {
 }
 
 const statusConfig: Record<ProjectStatus, { label: string; className: string }> = {
-  LIVE: { label: "LIVE", className: "text-primary border-primary/30 bg-primary/10" },
-  WIP: { label: "WIP", className: "text-yellow-400 border-yellow-400/30 bg-yellow-400/10" },
+  LIVE: { label: "LIVE", className: "text-emerald-400 border-emerald-400/30 bg-emerald-400/10" },
+  OSS:  { label: "OSS",  className: "text-primary border-primary/30 bg-primary/10" },
+  WIP:  { label: "WIP",  className: "text-yellow-400 border-yellow-400/30 bg-yellow-400/10" },
   ARCHIVED: { label: "ARCHIVED", className: "text-muted-foreground border-muted/30 bg-muted/30" },
 }
 
@@ -34,6 +36,7 @@ export function ProjectCard({
   stack,
   status,
   github,
+  demo,
   stars = 0,
   forks = 0,
   language,
@@ -128,16 +131,31 @@ export function ProjectCard({
               {forks}
             </span>
           </div>
-          <Link
-            href={github}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="text-muted-foreground hover:text-primary transition-colors"
-            aria-label={`Ver ${name} no GitHub`}
-          >
-            <ExternalLink size={13} />
-          </Link>
+          <div className="flex items-center gap-2">
+            {demo && (
+              <Link
+                href={demo}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="font-mono text-[10px] text-emerald-400 hover:text-emerald-300 transition-colors flex items-center gap-1"
+                aria-label={`Demo de ${name}`}
+              >
+                <Circle size={5} className="fill-current" />
+                demo
+              </Link>
+            )}
+            <Link
+              href={github}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="text-muted-foreground hover:text-primary transition-colors"
+              aria-label={`Ver ${name} no GitHub`}
+            >
+              <ExternalLink size={13} />
+            </Link>
+          </div>
         </CardFooter>
       </Card>
     </motion.div>

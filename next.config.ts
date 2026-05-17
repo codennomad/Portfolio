@@ -1,4 +1,5 @@
 import type { NextConfig } from "next"
+import withPWA from "@ducanh2912/next-pwa"
 
 const securityHeaders = [
   { key: "X-DNS-Prefetch-Control", value: "on" },
@@ -18,6 +19,7 @@ const securityHeaders = [
       "font-src 'self' https://fonts.gstatic.com data:",
       "img-src 'self' data: https://avatars.githubusercontent.com https://raw.githubusercontent.com https://github.com",
       "connect-src 'self' https://api.github.com",
+      "worker-src 'self'",
     ].join("; "),
   },
 ]
@@ -48,4 +50,10 @@ const nextConfig: NextConfig = {
   },
 }
 
-export default nextConfig
+export default withPWA({
+  dest: "public",
+  disable: process.env.NODE_ENV === "development",
+  cacheOnFrontEndNav: true,
+  aggressiveFrontEndNavCaching: true,
+  reloadOnOnline: true,
+})(nextConfig)

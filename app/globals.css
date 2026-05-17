@@ -36,7 +36,7 @@
   --secondary: #7c3aed;
   --secondary-foreground: #ffffff;
   --muted: #1a1a2e;
-  --muted-foreground: #555570;
+  --muted-foreground: #8080a8;
   --accent: #a855f7;
   --accent-foreground: #ffffff;
   --destructive: #ef4444;
@@ -112,6 +112,13 @@
   ::-webkit-scrollbar-thumb:hover {
     background: color-mix(in srgb, var(--primary) 40%, transparent);
   }
+}
+
+/* Respect motion preference for non-Framer animations */
+@media (prefers-reduced-motion: reduce) {
+  .scanlines::after { display: none; }
+  .cursor-blink { animation: none; opacity: 1; }
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
 
 /* Scanlines overlay */
