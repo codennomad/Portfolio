@@ -6,9 +6,7 @@ export const siteConfig = {
   bio: `Software engineer obsessed with building things that matter — from high-throughput
 backend systems to cognitive AI pipelines. I write Python, Rust, C/C++ and TypeScript.
 Always remote. Always shipping.`,
-  bioEn: `Software engineer obsessed with building things that matter — from high-throughput
-backend systems to cognitive AI pipelines. I write Python, Rust, C/C++ and TypeScript.
-Always remote. Always shipping.`,
+  bioEn: `I was a security guard. Then a retail salesman.\n\nNow I build AI systems, ship production software, and architect infrastructure that runs 24/7 without managed services.\n\nNobody handed me this. I built the skills the same way I build software — from scratch, one problem at a time.`,
   location: "Minas Gerais, Brazil",
   timezone: "UTC-3",
   available: true,
@@ -179,6 +177,20 @@ export const workTimeline = [
 ]
 
 export const featuredProjects = [
+  {
+    slug: "epoch",
+    name: "Epoch",
+    description:
+      "Zero-knowledge temporal second brain. Knowledge decays exponentially over time via half-life model — forcing review of what matters. AES-256-GCM + PBKDF2, HMAC integrity, brute-force lockout. Offline-first PWA, D3 force graph, zero server-side data.",
+    stack: ["React 19", "TypeScript", "Vite", "D3.js", "Zustand", "PWA"],
+    category: "Frontend",
+    status: "LIVE" as const,
+    demo: "https://epoch.codennomad.com",
+    github: "https://github.com/codennomad/epoch",
+    stars: 0,
+    language: "TypeScript",
+    metric: "confidence decay",
+  },
   {
     slug: "0xpray",
     name: "0xPray",
