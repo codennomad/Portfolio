@@ -151,11 +151,22 @@ export function Projects() {
                     href={selected.github}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center font-mono text-xs bg-primary text-primary-foreground hover:bg-primary/90 px-3 py-1.5 rounded-md transition-colors"
+                    className="inline-flex items-center font-mono text-xs bg-muted/60 border border-border text-foreground hover:border-primary/50 hover:text-primary hover:bg-primary/10 px-3 py-1.5 rounded-md transition-colors"
                   >
                     <GithubIcon size={13} className="mr-1.5" />
-                    Ver no GitHub
+                    GitHub
                   </Link>
+                  {selected.demo && (
+                    <Link
+                      href={selected.demo}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center font-mono text-xs bg-emerald-400/10 border border-emerald-400/30 text-emerald-400 hover:bg-emerald-400/20 hover:border-emerald-400/60 px-3 py-1.5 rounded-md transition-colors"
+                    >
+                      <ExternalLink size={13} className="mr-1.5" />
+                      Visit site →
+                    </Link>
+                  )}
                 </div>
               </div>
             </>

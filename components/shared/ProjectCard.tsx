@@ -5,6 +5,7 @@ import Link from "next/link"
 import { Star, GitFork, ExternalLink, Circle } from "lucide-react"
 import { Card, CardContent, CardHeader, CardFooter } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { GithubIcon } from "@/components/shared/BrandIcons"
 import { cn } from "@/lib/utils"
 import type { ProjectStatus } from "@/lib/data"
 
@@ -138,11 +139,11 @@ export function ProjectCard({
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
-                className="font-mono text-[10px] text-emerald-400 hover:text-emerald-300 transition-colors flex items-center gap-1"
-                aria-label={`Demo de ${name}`}
+                className="inline-flex items-center gap-1 font-mono text-[10px] px-2 py-1 rounded border border-emerald-400/30 bg-emerald-400/10 text-emerald-400 hover:bg-emerald-400/20 hover:border-emerald-400/60 transition-all"
+                aria-label={`Visit ${name} live site`}
               >
-                <Circle size={5} className="fill-current" />
-                demo
+                <ExternalLink size={10} />
+                live
               </Link>
             )}
             <Link
@@ -150,10 +151,11 @@ export function ProjectCard({
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="text-muted-foreground hover:text-primary transition-colors"
-              aria-label={`Ver ${name} no GitHub`}
+              className="inline-flex items-center gap-1 font-mono text-[10px] px-2 py-1 rounded border border-border bg-muted/40 text-muted-foreground hover:border-primary/50 hover:text-primary hover:bg-primary/10 transition-all"
+              aria-label={`View ${name} on GitHub`}
             >
-              <ExternalLink size={13} />
+              <GithubIcon size={11} />
+              github
             </Link>
           </div>
         </CardFooter>
